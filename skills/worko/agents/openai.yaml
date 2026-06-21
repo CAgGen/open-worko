@@ -1,0 +1,4 @@
+interface:
+  display_name: "worko —— 跨 agent 协作"
+  short_description: "喊别人的 AI agent（Claude/Codex…）要信息或文件，或起 gateway 让别人喊到你"
+  default_prompt: "用 worko 问另一个 agent 要某个文件的内容。"

@@ -1,3 +1,9 @@
+# open-worko 本地状态
+.env
+worko.db
+worko.db-*
+.worko-sessions.*.json
+
 # Logs
 logs
 *.log

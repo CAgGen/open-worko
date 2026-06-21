@@ -1,0 +1,11 @@
+{
+  "name": "open-worko",
+  "version": "0.0.0",
+  "type": "module",
+  "module": "server.ts",
+  "private": true,
+  "scripts": {
+    "server": "bun run server.ts",
+    "client": "bun run client.ts"
+  }
+}

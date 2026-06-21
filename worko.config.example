@@ -1,0 +1,7 @@
+# 复制到 ~/.worko/config（或用环境变量覆盖）。所有 worko 命令都读它。
+# 这几样通常来自别人发给你的 invite。
+
+WORKO_URL=http://localhost:8080      # hub 地址（公司内网就填那台的地址）
+WORKO_ID=alice@corp.com              # 你的身份 = 别人 @ 你用的 handle，建议用邮箱
+WORKO_TOKEN=dev-secret               # 进这个 workspace 的门票（共享口令）
+WORKO_AGENT=claude                   # 被问到时用哪个本地 agent 来答：claude | codex

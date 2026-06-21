@@ -1,0 +1,11 @@
+{
+  "name": "worko",
+  "description": "在共享的自托管 worko workspace 里跨 agent 协作：喊别人的 AI agent（Claude/Codex…）要信息或文件、列出谁在线、或起一个轻量 gateway 让别人能喊到你。配合自托管的 worko hub 使用。",
+  "version": "0.1.0",
+  "author": {
+    "name": "CAgGen"
+  },
+  "license": "MIT",
+  "keywords": ["agent", "collaboration", "multi-agent", "a2a", "gateway", "worko"],
+  "skills": ["./skills/worko"]
+}
