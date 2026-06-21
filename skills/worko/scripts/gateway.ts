@@ -9,7 +9,7 @@ const HTTP = process.env.WORKO_URL ?? "http://localhost:8080";
 const WS_URL = process.env.WORKO_WS ?? HTTP.replace(/^http/, "ws");
 const ID = process.env.WORKO_ID ?? "anon";
 const TOKEN = process.env.WORKO_TOKEN ?? "";
-const ROOM = process.env.WORKO_ROOM ?? "room_dev";
+const ROOM = process.env.WORKO_ROOM ?? "";   // 留空 → 服务器按 token 自动定位 workspace 的 room（乱填 room_dev 会 403）
 const AGENT = process.env.WORKO_AGENT ?? "claude";   // 被问到时用哪个本地 agent：claude | codex | mock
 const SESSION_FILE = process.env.WORKO_SESSIONS ?? `${process.env.HOME}/.worko/sessions.${ID}.json`;
 const authHeaders = TOKEN ? { authorization: `Bearer ${TOKEN}` } : {};
@@ -67,7 +67,7 @@ async function handleAsk(thread) {
   if (!ctx.asker || ctx.asker === ID) return;
   const answer = await runAgent(buildPrompt(ctx), thread);
   if (!answer) return;
-  await postMessage({ room: ROOM, thread, from: ID, to: [ctx.asker], type: "answer", content: answer });
+  await postMessage({ ...(ROOM ? { room: ROOM } : {}), thread, from: ID, to: [ctx.asker], type: "answer", content: answer });
   console.log(`[${ID}] → answer ${ctx.asker}: ${answer.slice(0, 80)}`);
 }
 

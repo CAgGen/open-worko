@@ -5,9 +5,24 @@ function Get-WorkoHomeDir {
   return $HOME
 }
 
+# 读 config 用。优先级：WORKO_CONFIG > 从当前目录向上找最近的 .worko\config（项目级）> ~\.worko\config（机器级）
 function Get-WorkoConfigPath {
   if ($env:WORKO_CONFIG) { return $env:WORKO_CONFIG }
+  $dir = (Get-Location).Path
+  while ($dir) {
+    $candidate = Join-Path $dir '.worko\config'
+    if (Test-Path -LiteralPath $candidate) { return $candidate }
+    $parent = Split-Path $dir -Parent
+    if ($parent -eq $dir) { break }
+    $dir = $parent
+  }
   return (Join-Path (Get-WorkoHomeDir) '.worko\config')
+}
+
+# 写 config 用（init）。WORKO_CONFIG 优先；否则项目级 .\.worko\config（每个项目一份）。
+function Get-WorkoConfigWritePath {
+  if ($env:WORKO_CONFIG) { return $env:WORKO_CONFIG }
+  return (Join-Path (Get-Location).Path '.worko\config')
 }
 
 function Get-WorkoRunDir {

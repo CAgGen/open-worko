@@ -4,9 +4,11 @@
 #   人（终端里跑）：缺啥就交互问。      init.sh
 #   agent（无 TTY）：把值当参数传。     init.sh --url U --id I --token T --agent codex
 set -euo pipefail
-CONFIG="${WORKO_CONFIG:-$HOME/.worko/config}"
+# 写到哪：WORKO_CONFIG 优先；否则项目级 ./.worko/config（每个项目一份）。
+# 想写机器级共享配置：WORKO_CONFIG=$HOME/.worko/config init.sh ...
+CONFIG="${WORKO_CONFIG:-$PWD/.worko/config}"
 
-URL="${WORKO_URL:-}"; ID="${WORKO_ID:-}"; TOKEN="${WORKO_TOKEN:-}"; AGENT="${WORKO_AGENT:-}"
+URL="${WORKO_URL:-}"; ID="${WORKO_ID:-}"; TOKEN="${WORKO_TOKEN:-}"; AGENT="${WORKO_AGENT:-}"; ROOM="${WORKO_ROOM:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --url)   URL="$2";   shift 2;;
@@ -43,13 +45,30 @@ if [ ${#err[@]} -gt 0 ]; then
   exit 1
 fi
 
+URL="${URL%/}"  # 去掉尾斜杠，否则拼出 $URL/agents 会变成 //agents
+
+# 加入 workspace 时用 token 把 room id 取回来存进 config：
+#  1) 之后发消息直接带正确 room，不再出现 "room not in workspace" 403；
+#  2) 顺带体检 token/连接——取不到就当场报警，而不是等第一次 ask 才发现。
+# 取不到（离线/token 错）就留空：发消息时服务器仍会按 token 兜底解析，不至于卡死。
+if [ -z "$ROOM" ] && command -v python3 >/dev/null 2>&1; then
+  auth=(); [ -n "$TOKEN" ] && auth=(-H "authorization: Bearer $TOKEN")
+  ROOM=$(curl -fsS -m 5 "${auth[@]}" "$URL/rooms" 2>/dev/null | python3 -c '
+import json,sys
+try: print((json.load(sys.stdin).get("rooms") or [{}])[0].get("id","") or "")
+except Exception: pass' 2>/dev/null) || ROOM=""
+  [ -n "$ROOM" ] || echo "[worko] 警告：没从 $URL 取到 room（hub 连得上吗？token 对吗？）。先留空，发消息时服务器按 token 兜底解析。" >&2
+fi
+
 umask 077
 mkdir -p "$(dirname "$CONFIG")"
+# export：start.sh source 后 gateway 子进程才拿得到这些变量。
 cat > "$CONFIG" <<EOF
-WORKO_URL=$URL
-WORKO_ID=$ID
-WORKO_TOKEN=$TOKEN
-WORKO_AGENT=$AGENT
+export WORKO_URL=$URL
+export WORKO_ID=$ID
+export WORKO_TOKEN=$TOKEN
+export WORKO_AGENT=$AGENT
+${ROOM:+export WORKO_ROOM=$ROOM}
 EOF
 echo "[worko] 已写 $CONFIG"
-echo "        id=$ID  url=$URL  agent=$AGENT  token=${TOKEN:+已设}"
+echo "        id=$ID  url=$URL  agent=$AGENT  token=${TOKEN:+已设}  room=${ROOM:-未取到(运行时兜底)}"

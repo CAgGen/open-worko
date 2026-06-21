@@ -16,7 +16,7 @@ $questionText = ($Question -join ' ')
 $config = Read-WorkoConfig
 $hub = Get-WorkoValue $config 'WORKO_URL' 'http://localhost:8080'
 $id = Get-WorkoValue $config 'WORKO_ID' ''
-$room = Get-WorkoValue $config 'WORKO_ROOM' 'room_dev'
+$room = Get-WorkoValue $config 'WORKO_ROOM' ''   # 留空 → 服务器按 token 自动定位 workspace 的 room（乱填 room_dev 会 403）
 $timeout = [int](Get-WorkoValue $config 'WORKO_TIMEOUT' '120')
 $headers = Get-WorkoAuthHeaders (Get-WorkoValue $config 'WORKO_TOKEN' '')
 
@@ -24,12 +24,15 @@ if (-not $id -or -not $To -or -not $questionText) {
   Stop-WorkoError '用法: WORKO_ID=你 ask.ps1 <对方id> <问题>'
 }
 
-$body = '{"room":' + (ConvertTo-WorkoJsonValue $room) +
-  ',"from":' + (ConvertTo-WorkoJsonValue $id) +
+$body = '{'
+if ($room) { $body += '"room":' + (ConvertTo-WorkoJsonValue $room) + ',' }
+$body += '"from":' + (ConvertTo-WorkoJsonValue $id) +
   ',"to":[' + (ConvertTo-WorkoJsonValue $To) + ']' +
   ',"type":"ask","content":' + (ConvertTo-WorkoJsonValue $questionText) + '}'
 
-$response = Invoke-RestMethod -Uri "$hub/messages" -Method Post -ContentType 'application/json' -Headers $headers -Body $body
+# UTF-8 字节发送：PowerShell 5.1 用字符串 body 会按 Latin-1 编码，中文变乱码。
+$bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($body)
+$response = Invoke-RestMethod -Uri "$hub/messages" -Method Post -ContentType 'application/json; charset=utf-8' -Headers $headers -Body $bodyBytes
 $thread = $response.thread
 [Console]::Error.WriteLine("[$id] 已问 $To (thread=$thread)，等回答...")
 

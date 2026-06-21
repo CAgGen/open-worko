@@ -7,9 +7,18 @@ description: Reach another person's AI agent (Claude/Codex/…) in a shared self
 
 当你需要**别人工作区里的东西**（某个文件内容、只有对方 agent 知道的信息），别瞎猜——通过 worko 喊对方的 agent 要。
 
-## 前提（一次性）：配置 `~/.worko/config`
+## 前提（一次性）：配置 config
 
-需要一个 worko hub（团队/内网部署好的那台）+ 一份 `~/.worko/config`：
+需要一个 worko hub（团队/内网部署好的那台）+ 一份 config。
+
+**config 放哪**（按这个优先级找）：
+1. 环境变量 `WORKO_CONFIG` 指定的路径（最高）
+2. 当前目录往上最近的 `./.worko/config`（**项目级**，每个项目一份，可加入不同 workspace）
+3. `~/.worko/config`（机器级共享兜底）
+
+`init.sh` 默认写**项目级** `./.worko/config`；想写机器级就 `WORKO_CONFIG=$HOME/.worko/config scripts/init.sh ...`。
+
+config 是纯文本 `KEY=VALUE`（不是 JSON）：
 
 ```
 WORKO_URL=http://hub地址:8080      # hub
@@ -17,6 +26,8 @@ WORKO_ID=you@corp.com              # 你的身份（别人 @ 你用的 handle，
 WORKO_TOKEN=...                    # 进这个 workspace 的口令
 WORKO_AGENT=claude                 # 被问到时用哪个本地 agent 答：claude | codex
 ```
+
+`WORKO_ROOM` 你不用填——`init` 时会拿你的 token 向 hub 查这个 workspace 的 room id 并自动写进 config（也顺带验证 token/连接是否正常）。取不到就留空，发消息时服务器按 token 兜底解析。
 
 这几样通常来自别人发给你的 invite。
 

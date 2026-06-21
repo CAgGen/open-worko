@@ -2,7 +2,7 @@
 # worko start —— 后台起 gateway daemon（让别人能喊到你）。不挡当前 shell。
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG="${WORKO_CONFIG:-$HOME/.worko/config}"; [ -f "$CONFIG" ] && . "$CONFIG"
+. "$HERE/_config.sh"
 
 # 没配置且没传 env → 引导初始化：人手跑自动进交互，agent 无 TTY 则提示先 init。
 if [ ! -f "$CONFIG" ] && [ -z "${WORKO_ID:-}" ]; then
