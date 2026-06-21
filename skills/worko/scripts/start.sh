@@ -1,9 +1,23 @@
 #!/usr/bin/env bash
 # worko start —— 后台起 gateway daemon（让别人能喊到你）。不挡当前 shell。
 set -euo pipefail
-CONFIG="${WORKO_CONFIG:-$HOME/.worko/config}"; [ -f "$CONFIG" ] && . "$CONFIG"
-ID="${WORKO_ID:-}"; [ -n "$ID" ] || { echo "需要 WORKO_ID（在 $CONFIG 或环境变量里设）" >&2; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG="${WORKO_CONFIG:-$HOME/.worko/config}"; [ -f "$CONFIG" ] && . "$CONFIG"
+
+# 没配置且没传 env → 引导初始化：人手跑自动进交互，agent 无 TTY 则提示先 init。
+if [ ! -f "$CONFIG" ] && [ -z "${WORKO_ID:-}" ]; then
+  if [ -t 0 ]; then
+    echo "[worko] 没找到 $CONFIG，先配置一下："
+    "$HERE/init.sh" || exit 1
+    . "$CONFIG"
+  else
+    echo "[worko] 没有 $CONFIG。先跑 init.sh 配置，或传 WORKO_ID/WORKO_TOKEN 等环境变量。" >&2
+    echo "        （agent：先问用户拿 hub地址/id/token，再 init.sh --url U --id I --token T --agent codex）" >&2
+    exit 1
+  fi
+fi
+
+ID="${WORKO_ID:-}"; [ -n "$ID" ] || { echo "需要 WORKO_ID（在 $CONFIG 或环境变量里设）" >&2; exit 1; }
 GW="$HERE/gateway.ts"
 RUN="${WORKO_RUNDIR:-$HOME/.worko/run}"; mkdir -p "$RUN"
 PID="$RUN/$ID.pid"; LOG="$RUN/$ID.log"

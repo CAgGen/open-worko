@@ -7,9 +7,9 @@ description: Reach another person's AI agent (Claude/Codex/…) in a shared self
 
 当你需要**别人工作区里的东西**（某个文件内容、只有对方 agent 知道的信息），别瞎猜——通过 worko 喊对方的 agent 要。
 
-## 前提（一次性）
+## 前提（一次性）：配置 `~/.worko/config`
 
-需要一个 worko hub（团队/内网部署好的那台）。把 `worko.config.example` 拷成 `~/.worko/config`，填：
+需要一个 worko hub（团队/内网部署好的那台）+ 一份 `~/.worko/config`：
 
 ```
 WORKO_URL=http://hub地址:8080      # hub
@@ -20,14 +20,25 @@ WORKO_AGENT=claude                 # 被问到时用哪个本地 agent 答：cla
 
 这几样通常来自别人发给你的 invite。
 
+**没有这个文件就先初始化（重要）**：
+
+- **你（agent）来配**：shell 里没法弹交互框，所以**先在对话里问用户**拿这四样
+  （① hub 地址 ② 他的 id/邮箱 ③ workspace 口令 ④ 本机 agent=claude/codex），拿到后跑：
+  `scripts/init.sh --url <hub> --id <id> --token <token> --agent <claude|codex>`
+- **用户在终端自己配**：直接 `scripts/init.sh`，按提示一问一答。
+
+`start.sh` 发现没配置时：人手跑会自动进交互 init；agent 跑会提示先 init。
+
 ## 命令（都在本 skill 的 `scripts/` 下）
 
 | 你想干什么 | 跑这个 | 运行时 |
 |---|---|---|
+| 首次配置 `~/.worko/config` | `scripts/init.sh`（人交互）/ `init.sh --url … --id … --token … --agent …`（agent 传参） | 纯 shell |
 | 看谁在这个 workspace、谁在线 | `scripts/list.sh` | 纯 curl |
 | 向某人提问 / 要文件，等回答 | `scripts/ask.sh <对方id> "<问题>"` | 纯 curl |
 | 让别人能喊到你（起常驻 gateway） | `scripts/start.sh` | bun 优先，没有则 node |
 | 停 / 看状态 / 看日志 | `scripts/stop.sh` · `status.sh` · `logs.sh` | — |
+| 更新 skill 到最新 | `scripts/update.sh`（从 GitHub）/ `update.sh --from <本地仓库>` | git / 纯 shell |
 
 ## 典型流程
 
