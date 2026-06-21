@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 function Get-WorkoHomeDir {
   if ($env:USERPROFILE) { return $env:USERPROFILE }

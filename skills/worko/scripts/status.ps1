@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param([switch]$Help)
 
 . (Join-Path $PSScriptRoot '_common.ps1')
