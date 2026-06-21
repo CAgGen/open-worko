@@ -41,6 +41,12 @@ WORKO_AGENT=claude                 # 被问到时用哪个本地 agent 答：cla
 
 `start.sh` / `start.ps1` 发现没配置时：人手跑会自动进交互 init；agent 跑会提示先 init。
 
+**用 codex 当本机 agent 的注意**：codex CLI 在非 git / 未信任目录里默认拒绝执行（报 `Not inside a trusted directory…`，表现为无输出）。gateway 已**写死 `--skip-git-repo-check`** 来过这道检查——它只跳过"是否 git 仓库"，**不碰沙箱**（沙箱默认只读，照旧）。**刻意不提供任何旁路沙箱的开关**：gateway 会应答 workspace 里任何人，不能留下远程突破沙箱的口子。
+
+想让 codex 在特定目录里读文件，用 `WORKO_AGENT_CWD=<目录>` 指定 gateway spawn codex 的工作目录（沙箱仍只读，安全）。
+
+gateway 没产出时会回 `[codex 无输出 exit=… | stderr: …]`，照着 stderr 排查。
+
 ## 命令（都在本 skill 的 `scripts/` 下）
 
 **先看系统选脚本**：macOS / Linux 用 `scripts/*.sh`；Windows 用一一对应的 `scripts/*.ps1`。`scripts/worko.ps1` 只保留给旧调用做分发器，skill 优先直接调用同名脚本。

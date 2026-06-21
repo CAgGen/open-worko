@@ -86,7 +86,7 @@ function ConvertTo-WorkoJsonValue {
 function Set-WorkoEnvironmentFromConfig {
   param([Parameter(Mandatory=$true)][hashtable]$Config)
 
-  foreach ($key in 'WORKO_URL','WORKO_ID','WORKO_TOKEN','WORKO_AGENT','WORKO_ROOM','WORKO_WS') {
+  foreach ($key in 'WORKO_URL','WORKO_ID','WORKO_TOKEN','WORKO_AGENT','WORKO_ROOM','WORKO_WS','WORKO_AGENT_CWD') {
     if ($Config.ContainsKey($key)) {
       Set-Item -Path "env:$key" -Value $Config[$key]
     }

@@ -23,10 +23,12 @@ async function postMessage(msg) {
   });
   return res.json();
 }
+// WORKO_AGENT_CWD：本地 agent 在哪个目录里跑（codex 要在"已信任"的目录才肯非交互执行）。
+const AGENT_CWD = process.env.WORKO_AGENT_CWD || undefined;
 function run(cmd, args) {
   return new Promise((resolve) => {
     let out = ""; let err = ""; let p;
-    try { p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] }); } catch { return resolve({ stdout: "", stderr: "", code: 127 }); }
+    try { p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"], cwd: AGENT_CWD }); } catch { return resolve({ stdout: "", stderr: "", code: 127 }); }
     p.stdout.on("data", (d) => (out += d.toString()));
     p.stderr.on("data", (d) => (err += d.toString()));
     p.on("error", () => resolve({ stdout: "", stderr: "", code: 127 }));
@@ -52,7 +54,10 @@ const adapters = {
     catch { return stdout.trim() || noOutput("claude", code, stderr); }
   },
   async codex(prompt) {
-    const { stdout, stderr, code } = await run("codex", ["exec", prompt]);
+    // --skip-git-repo-check：允许在非 git/非信任目录跑（codex 默认要求 git 仓库，否则拒绝执行）。
+    // 这只跳过"是否 git 仓库"那道检查，*不碰沙箱*——沙箱(默认只读)照旧。
+    // 刻意不暴露任何旁路沙箱的开关：gateway 应答 workspace 里任何人，不能给出突破沙箱的可能。
+    const { stdout, stderr, code } = await run("codex", ["exec", "--skip-git-repo-check", prompt]);
     if (code === 127) return "[codex 未安装或不在 PATH]";
     return stdout.trim() || noOutput("codex", code, stderr);
   },
