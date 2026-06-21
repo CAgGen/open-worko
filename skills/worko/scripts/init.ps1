@@ -41,6 +41,36 @@ if (-not $urlValue -or -not $idValue) {
 
 $urlValue = $urlValue.TrimEnd('/')  # 去掉尾斜杠，否则拼出 $url/agents 会变成 //agents
 
+# 本地 agent 的工作目录：默认当前目录。gateway 用它当 cwd + 沙箱边界，agent 只能在这个目录里干活。
+$WORKO_AGENT_CWD = if ($env:WORKO_AGENT_CWD) { $env:WORKO_AGENT_CWD } else { $PWD.Path }
+
+# Windows + codex：沙箱要 codex-windows-sandbox-setup.exe，它常没进 PATH → codex 起不了沙箱报"找不到"。
+# 定位它、把所在目录加进【用户级】PATH（不需要管理员；system 级才要提权，没必要）。幂等；找不到就提示重装。
+if ($agentValue -eq 'codex' -and ($IsWindows -or $env:OS -eq 'Windows_NT')) {
+  $helper = 'codex-windows-sandbox-setup.exe'
+  $roots = @()
+  $cmd = Get-Command codex -ErrorAction SilentlyContinue
+  if ($cmd) { $roots += Split-Path $cmd.Source }            # codex 自己所在目录最可能带着 helper
+  try { $roots += (& npm root -g 2>$null) } catch {}        # 兜底：npm 全局 node_modules
+  $found = $null
+  foreach ($r in ($roots | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique)) {
+    $hit = Get-ChildItem -Path $r -Recurse -Depth 5 -Filter $helper -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($hit) { $found = $hit.DirectoryName; break }
+  }
+  if ($found) {
+    $parts = ([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') | Where-Object { $_ }
+    if ($parts -notcontains $found) {
+      [Environment]::SetEnvironmentVariable('Path', (($parts + $found) -join ';'), 'User')
+      $env:Path = "$env:Path;$found"                        # 当前会话也立刻生效，免得重开终端
+      Write-Host "[worko] 已把 codex 沙箱目录加入用户 PATH：$found"
+    } else {
+      Write-Host "[worko] codex 沙箱目录已在 PATH：$found"
+    }
+  } else {
+    [Console]::Error.WriteLine("[worko] 警告：没找到 $helper，codex 沙箱起不来。多半 codex 装得不全，重装/升级 codex 后重跑。")
+  }
+}
+
 # 加入 workspace 时用 token 把 room id 取回来存进 config（发消息直接带对，且顺带体检 token/连接）。
 # 取不到（离线/token 错）就留空：发消息时服务器仍按 token 兜底解析。
 $roomValue = $env:WORKO_ROOM
@@ -62,7 +92,8 @@ $lines = @(
   "WORKO_URL=$urlValue",
   "WORKO_ID=$idValue",
   "WORKO_TOKEN=$tokenValue",
-  "WORKO_AGENT=$agentValue"
+  "WORKO_AGENT=$agentValue",
+  "WORKO_AGENT_CWD=$WORKO_AGENT_CWD"
 )
 if ($roomValue) { $lines += "WORKO_ROOM=$roomValue" }
 $lines | Set-Content -Path $configPath -Encoding UTF8
@@ -70,4 +101,4 @@ $lines | Set-Content -Path $configPath -Encoding UTF8
 $tokenStatus = if ($tokenValue) { '已设' } else { '空' }
 $roomStatus = if ($roomValue) { $roomValue } else { '未取到(运行时兜底)' }
 Write-Host "[worko] 已写 $configPath"
-Write-Host "        id=$idValue  url=$urlValue  agent=$agentValue  token=$tokenStatus  room=$roomStatus"
+Write-Host "        id=$idValue  url=$urlValue  agent=$agentValue  token=$tokenStatus  room=$roomStatus  workdir=$WORKO_AGENT_CWD"

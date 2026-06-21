@@ -9,6 +9,8 @@ set -euo pipefail
 CONFIG="${WORKO_CONFIG:-$PWD/.worko/config}"
 
 URL="${WORKO_URL:-}"; ID="${WORKO_ID:-}"; TOKEN="${WORKO_TOKEN:-}"; AGENT="${WORKO_AGENT:-}"; ROOM="${WORKO_ROOM:-}"
+# 本地 agent 的工作目录：默认当前目录。gateway 用它当 cwd + 沙箱边界，agent 只能在这个目录里干活。
+WORKO_AGENT_CWD="${WORKO_AGENT_CWD:-$PWD}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --url)   URL="$2";   shift 2;;
@@ -73,7 +75,8 @@ export WORKO_URL=$URL
 export WORKO_ID=$ID
 export WORKO_TOKEN=$TOKEN
 export WORKO_AGENT=$AGENT
+export WORKO_AGENT_CWD=$WORKO_AGENT_CWD
 ${ROOM:+export WORKO_ROOM=$ROOM}
 EOF
 echo "[worko] 已写 $CONFIG"
-echo "        id=$ID  url=$URL  agent=$AGENT  token=${TOKEN:+已设}  room=${ROOM:-未取到(运行时兜底)}"
+echo "        id=$ID  url=$URL  agent=$AGENT  token=${TOKEN:+已设}  room=${ROOM:-未取到(运行时兜底)}  workdir=$WORKO_AGENT_CWD"

@@ -4,6 +4,19 @@
 import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+import { platform } from "node:os";
+
+// 弹个桌面通知给机主：daemon 静默应答的话，机主根本不知道自己的 agent 被人拉起来跑过。
+// 尽力而为：弹不出来（无桌面/无工具）就算了，console.log 仍在。WORKO_NOTIFY=0 可关。
+function notifyUser(title, body) {
+  if (process.env.WORKO_NOTIFY === "0") return;
+  const t = title.replace(/"/g, "'"), b = body.replace(/"/g, "'");
+  try {
+    if (platform() === "darwin") spawn("osascript", ["-e", `display notification "${b}" with title "${t}"`], { stdio: "ignore" }).unref();
+    else if (platform() === "linux") spawn("notify-send", [t, b], { stdio: "ignore" }).unref();
+    // ponytail: Windows 原生 toast 要装 BurntToast 模块，不值当；靠下面的 console.log 兜底，真有人要再加。
+  } catch { /* 通知失败不该影响应答 */ }
+}
 
 const HTTP = process.env.WORKO_URL ?? "http://localhost:8080";
 const WS_URL = process.env.WORKO_WS ?? HTTP.replace(/^http/, "ws");
@@ -25,6 +38,9 @@ async function postMessage(msg) {
 }
 // WORKO_AGENT_CWD：本地 agent 在哪个目录里跑（codex 要在"已信任"的目录才肯非交互执行）。
 const AGENT_CWD = process.env.WORKO_AGENT_CWD || undefined;
+// WORKO_SANDBOX：codex 沙箱档位。默认 workspace-write = 盒子内可读/可跑命令/可写，
+// 配 approval_policy=never → headless 永不弹批准、越界直接失败而不是吊死等人。谨慎者设 read-only。
+const SANDBOX = process.env.WORKO_SANDBOX || "workspace-write";
 function run(cmd, args) {
   return new Promise((resolve) => {
     let out = ""; let err = ""; let p;
@@ -55,9 +71,14 @@ const adapters = {
   },
   async codex(prompt) {
     // --skip-git-repo-check：允许在非 git/非信任目录跑（codex 默认要求 git 仓库，否则拒绝执行）。
-    // 这只跳过"是否 git 仓库"那道检查，*不碰沙箱*——沙箱(默认只读)照旧。
-    // 刻意不暴露任何旁路沙箱的开关：gateway 应答 workspace 里任何人，不能给出突破沙箱的可能。
-    const { stdout, stderr, code } = await run("codex", ["exec", "--skip-git-repo-check", prompt]);
+    // -s $SANDBOX + approval_policy=never：headless 命门——只要还会弹批准，无人应答就吊死。
+    //   workspace-write 让盒子内的读/跑命令/写直接放行（如解 .docx），越界操作直接失败而非卡住。
+    // -C $AGENT_CWD：把工作根 + 沙箱边界绑到这个目录。
+    // 仍不暴露 danger-full-access：gateway 应答 workspace 里任何人，不给突破沙箱的口子。
+    const a = ["exec", "--skip-git-repo-check", "-s", SANDBOX, "-c", "approval_policy=never"];
+    if (AGENT_CWD) a.push("-C", AGENT_CWD);
+    a.push(prompt);
+    const { stdout, stderr, code } = await run("codex", a);
     if (code === 127) return "[codex 未安装或不在 PATH]";
     return stdout.trim() || noOutput("codex", code, stderr);
   },
@@ -77,6 +98,9 @@ async function handleAsk(thread) {
   const ctx = await (await fetch(`${HTTP}/context?thread=${thread}`, { headers: authHeaders })).json();
   if (ctx.status !== "waiting") return;            // 已答过/已结束 → 跳过（补同步时去重）
   if (!ctx.asker || ctx.asker === ID) return;
+  const q = (ctx.recent?.at(-1)?.content ?? "").replace(/\s+/g, " ").slice(0, 120);
+  console.log(`[${ID}] ↑ ${ctx.asker} 问你，正在拉起 ${AGENT}: ${q}`);
+  notifyUser(`worko: ${ctx.asker} 在问你`, q || "（启动本地 agent 应答）");
   const answer = await runAgent(buildPrompt(ctx), thread);
   if (!answer) return;
   await postMessage({ ...(ROOM ? { room: ROOM } : {}), thread, from: ID, to: [ctx.asker], type: "answer", content: answer });
