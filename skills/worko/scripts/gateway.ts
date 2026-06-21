@@ -25,13 +25,20 @@ async function postMessage(msg) {
 }
 function run(cmd, args) {
   return new Promise((resolve) => {
-    let out = ""; let p;
-    try { p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] }); } catch { return resolve({ stdout: "", code: 127 }); }
+    let out = ""; let err = ""; let p;
+    try { p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] }); } catch { return resolve({ stdout: "", stderr: "", code: 127 }); }
     p.stdout.on("data", (d) => (out += d.toString()));
-    p.on("error", () => resolve({ stdout: "", code: 127 }));
-    p.on("close", (c) => resolve({ stdout: out, code: c ?? 0 }));
+    p.stderr.on("data", (d) => (err += d.toString()));
+    p.on("error", () => resolve({ stdout: "", stderr: "", code: 127 }));
+    p.on("close", (c) => resolve({ stdout: out, stderr: err, code: c ?? 0 }));
   });
 }
+
+// agent 没产出时，把退出码 + stderr 摘要带回去，便于排查（别只回干巴巴的占位符）。
+const noOutput = (name, code, stderr) => {
+  const e = stderr.trim().replace(/\s+/g, " ").slice(0, 300);
+  return `[${name} 无输出 exit=${code}${e ? " | stderr: " + e : ""}]`;
+};
 
 // agent 适配层：每家 CLI 怎么调、回答从哪读，都收在这。
 const adapters = {
@@ -39,15 +46,15 @@ const adapters = {
   async claude(prompt, thread) {
     const s = await loadSessions(); const a = ["-p", "--output-format", "json"];
     if (s[thread]) a.push("--resume", s[thread]); a.push(prompt);
-    const { stdout, code } = await run("claude", a);
+    const { stdout, stderr, code } = await run("claude", a);
     if (code === 127) return "[claude 未安装或不在 PATH]";
     try { const j = JSON.parse(stdout); if (j.session_id) { s[thread] = j.session_id; await saveSessions(s); } return (j.result ?? stdout).trim(); }
-    catch { return stdout.trim(); }
+    catch { return stdout.trim() || noOutput("claude", code, stderr); }
   },
   async codex(prompt) {
-    const { stdout, code } = await run("codex", ["exec", prompt]);
+    const { stdout, stderr, code } = await run("codex", ["exec", prompt]);
     if (code === 127) return "[codex 未安装或不在 PATH]";
-    return stdout.trim() || "[codex 无输出]";
+    return stdout.trim() || noOutput("codex", code, stderr);
   },
 };
 const runAgent = (prompt, thread) => (adapters[AGENT] ?? adapters.claude)(prompt, thread);
