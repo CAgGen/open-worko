@@ -1,8 +1,12 @@
 # open-worko 本地状态
+.DS_Store
+**/.DS_Store
+.claude/
 .env
 worko.db
 worko.db-*
 .worko-sessions.*.json
+.worko/
 
 # Logs
 logs
