@@ -48,10 +48,11 @@ if (-not $roomValue) {
   try {
     $headers = Get-WorkoAuthHeaders $tokenValue
     $rooms = Invoke-RestMethod -Uri "$urlValue/rooms" -Headers $headers -TimeoutSec 5
-    if ($rooms.rooms -and $rooms.rooms.Count -gt 0) { $roomValue = $rooms.rooms[0].id }
+    # 只在恰好 1 个 room 时采用：authed 模式 token 锁定唯一 room；dev 模式会返回所有 workspace 的 room，分不清就放弃。
+    if ($rooms.rooms -and @($rooms.rooms).Count -eq 1) { $roomValue = @($rooms.rooms)[0].id }
   } catch { $roomValue = '' }
   if (-not $roomValue) {
-    [Console]::Error.WriteLine("[worko] 警告：没从 $urlValue 取到 room（hub 连得上吗？token 对吗？）。先留空，发消息时服务器按 token 兜底解析。")
+    [Console]::Error.WriteLine("[worko] 提示：没唯一确定 room（连不上 / token 不对 / dev 模式有多个 workspace）。留空即可，发消息时服务器按 token 兜底解析。")
   }
 }
 

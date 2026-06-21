@@ -79,9 +79,14 @@ async function catchUp() {
   } catch (e) { console.error("catchUp 失败:", e.message); }
 }
 
+// 重连退避：连不上/被拒时别 2s 死循环（会把自己 IP 刷进限流/封禁）。
+// 成功连上就重置回 2s。
+let retryMs = 2000;
+const RETRY_MAX = 60_000;
+
 function listen() {
   const ws = new WebSocket(`${WS_URL}/?id=${encodeURIComponent(ID)}&token=${encodeURIComponent(TOKEN)}`);
-  ws.onopen = () => { console.log(`[${ID}] connected ${WS_URL} (agent=${AGENT})`); catchUp(); };
+  ws.onopen = () => { retryMs = 2000; console.log(`[${ID}] connected ${WS_URL} (agent=${AGENT})`); catchUp(); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     // 只对 inbound ask 动作；answer/note 一律忽略（那是我问出去的回信，发起方自己收）。
@@ -90,7 +95,11 @@ function listen() {
       handleAsk(m.payload.thread).catch(console.error);
     }
   };
-  ws.onclose = () => { console.log(`[${ID}] disconnected, retry 2s`); setTimeout(listen, 2000); };
+  ws.onclose = () => {
+    console.log(`[${ID}] disconnected, retry ${retryMs / 1000}s（连不上多半是 token 没配好/还没被加进 workspace 白名单）`);
+    setTimeout(listen, retryMs);
+    retryMs = Math.min(retryMs * 2, RETRY_MAX);  // 指数退避，封顶 60s
+  };
   ws.onerror = () => ws.close();
 }
 

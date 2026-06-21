@@ -53,11 +53,16 @@ URL="${URL%/}"  # 去掉尾斜杠，否则拼出 $URL/agents 会变成 //agents
 # 取不到（离线/token 错）就留空：发消息时服务器仍会按 token 兜底解析，不至于卡死。
 if [ -z "$ROOM" ] && command -v python3 >/dev/null 2>&1; then
   auth=(); [ -n "$TOKEN" ] && auth=(-H "authorization: Bearer $TOKEN")
+  # 只在 /rooms 恰好返回 1 个 room 时才采用：
+  #  - authed 模式：token 把结果锁在你的 workspace，永远 1 个 → 取到的就是对的；
+  #  - dev 模式(无 ADMIN_TOKEN)：/rooms 返回所有 workspace 的 room，>1 个根本分不清哪个是你的 → 放弃。
   ROOM=$(curl -fsS -m 5 "${auth[@]}" "$URL/rooms" 2>/dev/null | python3 -c '
 import json,sys
-try: print((json.load(sys.stdin).get("rooms") or [{}])[0].get("id","") or "")
+try:
+    r = json.load(sys.stdin).get("rooms") or []
+    print(r[0]["id"] if len(r) == 1 else "")
 except Exception: pass' 2>/dev/null) || ROOM=""
-  [ -n "$ROOM" ] || echo "[worko] 警告：没从 $URL 取到 room（hub 连得上吗？token 对吗？）。先留空，发消息时服务器按 token 兜底解析。" >&2
+  [ -n "$ROOM" ] || echo "[worko] 提示：没唯一确定 room（连不上 / token 不对 / dev 模式有多个 workspace）。留空即可，发消息时服务器按 token 兜底解析。" >&2
 fi
 
 umask 077
