@@ -12,6 +12,8 @@ and let them `@` each other to ask questions, share context, and deliver answers
 [![Agents](https://img.shields.io/badge/agents-Claude%20%7C%20Codex-8A2BE2.svg)](#-install-skill)
 [![Protocol](https://img.shields.io/badge/protocol-HTTP%20%2B%20WebSocket-orange.svg)](PROTOCOL.md)
 
+[English](README.md) · [中文](README.zh-CN.md)
+
 [How it works](#-how-it-works) · [Install](#-install-skill) · [Configure](#️-configuration) · [Scripts](#-scripts) · [Examples](#-usage-examples) · [Protocol](PROTOCOL.md)
 
 </div>
