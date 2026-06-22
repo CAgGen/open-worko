@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# worko init —— 写 ~/.worko/config。
-# 两种用法：
-#   人（终端里跑）：缺啥就交互问。      init.sh
-#   agent（无 TTY）：把值当参数传。     init.sh --url U --id I --token T --agent codex
+# worko init — write ~/.worko/config.
+# Two usage modes:
+#   Human (run in terminal): prompts interactively for any missing values.   init.sh
+#   Agent (no TTY): pass all values as arguments.                            init.sh --url U --id I --token T --agent codex
 set -euo pipefail
-# 写到哪：WORKO_CONFIG 优先；否则项目级 ./.worko/config（每个项目一份）。
-# 想写机器级共享配置：WORKO_CONFIG=$HOME/.worko/config init.sh ...
+# Write destination: WORKO_CONFIG takes priority; otherwise project-level ./.worko/config (one per project).
+# For machine-level shared config: WORKO_CONFIG=$HOME/.worko/config init.sh ...
 CONFIG="${WORKO_CONFIG:-$PWD/.worko/config}"
 
 URL="${WORKO_URL:-}"; ID="${WORKO_ID:-}"; TOKEN="${WORKO_TOKEN:-}"; AGENT="${WORKO_AGENT:-}"; ROOM="${WORKO_ROOM:-}"
-# 本地 agent 的工作目录：默认当前目录。gateway 用它当 cwd + 沙箱边界，agent 只能在这个目录里干活。
+# Working directory for the local agent: defaults to current directory.
+# The gateway uses this as cwd + sandbox boundary — the agent can only operate within this directory.
 WORKO_AGENT_CWD="${WORKO_AGENT_CWD:-$PWD}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -17,13 +18,13 @@ while [ $# -gt 0 ]; do
     --id)    ID="$2";    shift 2;;
     --token) TOKEN="$2"; shift 2;;
     --agent) AGENT="$2"; shift 2;;
-    -h|--help) echo "用法: init.sh [--url U] [--id I] [--token T] [--agent claude|codex]"; exit 0;;
-    *) echo "未知参数: $1" >&2; exit 1;;
+    -h|--help) echo "Usage: init.sh [--url U] [--id I] [--token T] [--agent claude|codex]"; exit 0;;
+    *) echo "Unknown argument: $1" >&2; exit 1;;
   esac
 done
 
-# 缺的字段：有 TTY（人）就交互问；没 TTY（agent）就留空，下面统一校验。
-ask() {  # ask VARNAME "问题" "默认"
+# For missing fields: prompt interactively if there is a TTY (human); leave empty if no TTY (agent) and validate below.
+ask() {  # ask VARNAME "prompt" "default"
   local var="$1" q="$2" def="$3" ans
   [ -n "${!var}" ] && return
   if [ -t 0 ]; then
@@ -31,45 +32,45 @@ ask() {  # ask VARNAME "问题" "默认"
     printf -v "$var" '%s' "${ans:-$def}"
   fi
 }
-ask URL   "Hub 地址 (WORKO_URL)"                    "http://localhost:8080"
-ask ID    "你的身份/邮箱 (WORKO_ID)"                 ""
-ask TOKEN "Workspace 口令 (WORKO_TOKEN)"             ""
-ask AGENT "本机 agent (WORKO_AGENT: claude|codex)"   "claude"
+ask URL   "Hub address (WORKO_URL)"                    "http://localhost:8080"
+ask ID    "Your identity/email (WORKO_ID)"              ""
+ask TOKEN "Workspace token (WORKO_TOKEN)"               ""
+ask AGENT "Local agent (WORKO_AGENT: claude|codex)"    "claude"
 
-# 校验必填
+# Validate required fields
 err=()
 [ -n "$URL" ] || err+=("--url")
 [ -n "$ID" ]  || err+=("--id")
 if [ ${#err[@]} -gt 0 ]; then
-  echo "[worko] 缺少必填: ${err[*]}" >&2
-  echo "        非交互运行请传参，例如：" >&2
-  echo "        init.sh --url http://hub:8080 --id you@corp.com --token <口令> --agent codex" >&2
+  echo "[worko] Missing required fields: ${err[*]}" >&2
+  echo "        For non-interactive use, pass as arguments, e.g.:" >&2
+  echo "        init.sh --url http://hub:8080 --id you@corp.com --token <token> --agent codex" >&2
   exit 1
 fi
 
-URL="${URL%/}"  # 去掉尾斜杠，否则拼出 $URL/agents 会变成 //agents
+URL="${URL%/}"  # strip trailing slash to avoid double-slash in $URL/agents
 
-# 加入 workspace 时用 token 把 room id 取回来存进 config：
-#  1) 之后发消息直接带正确 room，不再出现 "room not in workspace" 403；
-#  2) 顺带体检 token/连接——取不到就当场报警，而不是等第一次 ask 才发现。
-# 取不到（离线/token 错）就留空：发消息时服务器仍会按 token 兜底解析，不至于卡死。
+# Fetch room id from the hub using the token when joining a workspace:
+#  1) Subsequent messages include the correct room, avoiding "room not in workspace" 403s.
+#  2) Also validates the token/connection — failure is surfaced now rather than on the first ask.
+# If unavailable (offline / wrong token), leave empty: server falls back to token-based room resolution.
 if [ -z "$ROOM" ] && command -v python3 >/dev/null 2>&1; then
   auth=(); [ -n "$TOKEN" ] && auth=(-H "authorization: Bearer $TOKEN")
-  # 只在 /rooms 恰好返回 1 个 room 时才采用：
-  #  - authed 模式：token 把结果锁在你的 workspace，永远 1 个 → 取到的就是对的；
-  #  - dev 模式(无 ADMIN_TOKEN)：/rooms 返回所有 workspace 的 room，>1 个根本分不清哪个是你的 → 放弃。
+  # Only use the result when /rooms returns exactly 1 room:
+  #  - authed mode: token locks the result to your workspace — always 1 → safe to use.
+  #  - dev mode (no ADMIN_TOKEN): /rooms returns all workspace rooms — can't tell which one is yours → skip.
   ROOM=$(curl -fsS -m 5 "${auth[@]}" "$URL/rooms" 2>/dev/null | python3 -c '
 import json,sys
 try:
     r = json.load(sys.stdin).get("rooms") or []
     print(r[0]["id"] if len(r) == 1 else "")
 except Exception: pass' 2>/dev/null) || ROOM=""
-  [ -n "$ROOM" ] || echo "[worko] 提示：没唯一确定 room（连不上 / token 不对 / dev 模式有多个 workspace）。留空即可，发消息时服务器按 token 兜底解析。" >&2
+  [ -n "$ROOM" ] || echo "[worko] Note: could not determine a unique room (unreachable / wrong token / dev mode with multiple workspaces). Leaving empty — server will resolve via token at send time." >&2
 fi
 
 umask 077
 mkdir -p "$(dirname "$CONFIG")"
-# export：start.sh source 后 gateway 子进程才拿得到这些变量。
+# export so that child processes spawned after sourcing start.sh also get these variables.
 cat > "$CONFIG" <<EOF
 export WORKO_URL=$URL
 export WORKO_ID=$ID
@@ -78,5 +79,5 @@ export WORKO_AGENT=$AGENT
 export WORKO_AGENT_CWD=$WORKO_AGENT_CWD
 ${ROOM:+export WORKO_ROOM=$ROOM}
 EOF
-echo "[worko] 已写 $CONFIG"
-echo "        id=$ID  url=$URL  agent=$AGENT  token=${TOKEN:+已设}  room=${ROOM:-未取到(运行时兜底)}  workdir=$WORKO_AGENT_CWD"
+echo "[worko] Written to $CONFIG"
+echo "        id=$ID  url=$URL  agent=$AGENT  token=${TOKEN:+set}  room=${ROOM:-not fetched (resolved at runtime)}  workdir=$WORKO_AGENT_CWD"

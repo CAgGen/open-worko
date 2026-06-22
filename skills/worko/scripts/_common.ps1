@@ -1,11 +1,11 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
 function Get-WorkoHomeDir {
   if ($env:USERPROFILE) { return $env:USERPROFILE }
   return $HOME
 }
 
-# 读 config 用。优先级：WORKO_CONFIG > 从当前目录向上找最近的 .worko\config（项目级）> ~\.worko\config（机器级）
+# Config lookup. Priority: WORKO_CONFIG > nearest .worko\config walking up (project-level) > ~\.worko\config (machine-level)
 function Get-WorkoConfigPath {
   if ($env:WORKO_CONFIG) { return $env:WORKO_CONFIG }
   $dir = (Get-Location).Path
@@ -19,7 +19,7 @@ function Get-WorkoConfigPath {
   return (Join-Path (Get-WorkoHomeDir) '.worko\config')
 }
 
-# 写 config 用（init）。WORKO_CONFIG 优先；否则项目级 .\.worko\config（每个项目一份）。
+# Write path for config (init). WORKO_CONFIG takes priority; otherwise project-level .\.worko\config.
 function Get-WorkoConfigWritePath {
   if ($env:WORKO_CONFIG) { return $env:WORKO_CONFIG }
   return (Join-Path (Get-Location).Path '.worko\config')
@@ -132,5 +132,5 @@ function Resolve-WorkoRuntime {
   if ($env:WORKO_RUNTIME) { return $env:WORKO_RUNTIME }
   if (Get-Command bun -ErrorAction SilentlyContinue) { return 'bun' }
   if (Get-Command node -ErrorAction SilentlyContinue) { return 'node' }
-  Stop-WorkoError '需要 bun 或 node（node 22.18+/23.6+）来跑 gateway。Windows 下个 node 安装包即可。'
+  Stop-WorkoError 'bun or node (node 22.18+/23.6+) is required to run the gateway. On Windows, install the node package.'
 }

@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
 $commands = @{
   init = 'init.ps1'
@@ -12,8 +12,8 @@ $commands = @{
 }
 
 function Show-Usage {
-  Write-Host '用法: worko.ps1 <init|list|ask|start|stop|status|logs|update> [args]'
-  Write-Host 'Windows 也可以直接调用同名脚本，例如: scripts/list.ps1'
+  Write-Host 'Usage: worko.ps1 <init|list|ask|start|stop|status|logs|update> [args]'
+  Write-Host 'On Windows you can also call individual scripts directly, e.g.: scripts/list.ps1'
 }
 
 if ($args.Count -eq 0 -or $args[0] -eq 'help' -or $args[0] -eq '-h' -or $args[0] -eq '--help') {

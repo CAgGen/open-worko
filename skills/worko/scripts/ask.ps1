@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
   [Parameter(Position=0)][string]$To,
   [Parameter(Position=1,ValueFromRemainingArguments=$true)][string[]]$Question,
@@ -8,7 +8,7 @@ param(
 . (Join-Path $PSScriptRoot '_common.ps1')
 
 if ($Help) {
-  Write-Host '用法: ask.ps1 <对方id> <问题>'
+  Write-Host 'Usage: ask.ps1 <target-id> <question>'
   exit 0
 }
 
@@ -16,12 +16,12 @@ $questionText = ($Question -join ' ')
 $config = Read-WorkoConfig
 $hub = Get-WorkoValue $config 'WORKO_URL' 'http://localhost:8080'
 $id = Get-WorkoValue $config 'WORKO_ID' ''
-$room = Get-WorkoValue $config 'WORKO_ROOM' ''   # 留空 → 服务器按 token 自动定位 workspace 的 room（乱填 room_dev 会 403）
+$room = Get-WorkoValue $config 'WORKO_ROOM' ''   # empty → server auto-resolves the workspace room via token (hardcoding room_dev causes 403)
 $timeout = [int](Get-WorkoValue $config 'WORKO_TIMEOUT' '120')
 $headers = Get-WorkoAuthHeaders (Get-WorkoValue $config 'WORKO_TOKEN' '')
 
 if (-not $id -or -not $To -or -not $questionText) {
-  Stop-WorkoError '用法: WORKO_ID=你 ask.ps1 <对方id> <问题>'
+  Stop-WorkoError 'Usage: WORKO_ID=you ask.ps1 <target-id> <question>'
 }
 
 $body = '{'
@@ -30,11 +30,11 @@ $body += '"from":' + (ConvertTo-WorkoJsonValue $id) +
   ',"to":[' + (ConvertTo-WorkoJsonValue $To) + ']' +
   ',"type":"ask","content":' + (ConvertTo-WorkoJsonValue $questionText) + '}'
 
-# UTF-8 字节发送：PowerShell 5.1 用字符串 body 会按 Latin-1 编码，中文变乱码。
+# Send as UTF-8 bytes: PowerShell 5.1 encodes string bodies as Latin-1, mangling non-ASCII content.
 $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($body)
 $response = Invoke-RestMethod -Uri "$hub/messages" -Method Post -ContentType 'application/json; charset=utf-8' -Headers $headers -Body $bodyBytes
 $thread = $response.thread
-[Console]::Error.WriteLine("[$id] 已问 $To (thread=$thread)，等回答...")
+[Console]::Error.WriteLine("[$id] Sent to $To (thread=$thread), waiting for answer...")
 
 $threadQuery = [uri]::EscapeDataString($thread)
 $deadline = (Get-Date).AddSeconds($timeout)
@@ -49,5 +49,5 @@ while ((Get-Date) -lt $deadline) {
   }
 }
 
-[Console]::Error.WriteLine("[$id] 等 $To 超时(${timeout}s)")
+[Console]::Error.WriteLine("[$id] Timed out waiting for $To (${timeout}s)")
 exit 1

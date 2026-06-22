@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# worko update —— 把已安装的 worko skill 更新到最新。
-#   update.sh                              从默认 GitHub repo 拉最新，覆盖自己所在的 skill
-#   update.sh --from /path/to/open-worko   从本地仓库更新（开发/没 push 时用）
-#   update.sh --repo owner/repo --ref dev  指定来源/分支
+# worko update — update the installed worko skill to the latest version.
+#   update.sh                              pull latest from the default GitHub repo, overwrite the skill in place
+#   update.sh --from /path/to/open-worko   update from a local repo (useful during development / before pushing)
+#   update.sh --repo owner/repo --ref dev  specify a different source repo / branch
 #
-# 注：整段逻辑包在 main() 里，bash 会先读完再执行——这样覆盖自身脚本也不会跑坏。
+# Note: all logic is wrapped in main() so bash reads the whole file before executing —
+# overwriting this script mid-run won't corrupt execution.
 set -euo pipefail
 
 main() {
@@ -18,16 +19,16 @@ main() {
       --from) FROM="$2"; shift 2;;
       --repo) REPO="$2"; shift 2;;
       --ref)  REF="$2";  shift 2;;
-      -h|--help) echo "用法: update.sh [--from 本地仓库路径] [--repo owner/repo] [--ref 分支]"; return 0;;
-      *) echo "未知参数: $1" >&2; return 1;;
+      -h|--help) echo "Usage: update.sh [--from local-repo-path] [--repo owner/repo] [--ref branch]"; return 0;;
+      *) echo "Unknown argument: $1" >&2; return 1;;
     esac
   done
 
-  # 目标 = 本脚本所在 skill 目录（scripts/ 的上一级）
+  # Target = the skill directory containing this script (parent of scripts/)
   local HERE DEST
   HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   DEST="$(cd "$HERE/.." && pwd)"
-  [ -f "$DEST/SKILL.md" ] || { echo "[worko] 这看着不像 worko skill 目录: $DEST" >&2; return 1; }
+  [ -f "$DEST/SKILL.md" ] || { echo "[worko] This doesn't look like a worko skill directory: $DEST" >&2; return 1; }
 
   local TMP; TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' RETURN
@@ -35,23 +36,23 @@ main() {
   local SRC
   if [ -n "$FROM" ]; then
     SRC="$FROM/$PATH_IN_REPO"
-    [ -d "$SRC" ] || { echo "[worko] 本地源没有 $SRC" >&2; return 1; }
-    echo "[worko] 从本地 $SRC 更新…"
+    [ -d "$SRC" ] || { echo "[worko] Local source does not contain $SRC" >&2; return 1; }
+    echo "[worko] Updating from local $SRC..."
   else
-    echo "[worko] 从 github.com/$REPO ($REF) 拉 $PATH_IN_REPO …"
+    echo "[worko] Pulling $PATH_IN_REPO from github.com/$REPO ($REF)..."
     git clone --depth 1 --branch "$REF" --filter=blob:none --sparse \
       "https://github.com/$REPO.git" "$TMP/repo" >/dev/null 2>&1 \
-      || { echo "[worko] git clone 失败（检查 repo/分支/网络；私有仓需 GITHUB_TOKEN）" >&2; return 1; }
+      || { echo "[worko] git clone failed (check repo/branch/network; private repos need GITHUB_TOKEN)" >&2; return 1; }
     ( cd "$TMP/repo" && git sparse-checkout set "$PATH_IN_REPO" >/dev/null 2>&1 )
     SRC="$TMP/repo/$PATH_IN_REPO"
-    [ -d "$SRC" ] || { echo "[worko] repo 里没有 $PATH_IN_REPO" >&2; return 1; }
+    [ -d "$SRC" ] || { echo "[worko] $PATH_IN_REPO not found in repo" >&2; return 1; }
   fi
 
-  # 只覆盖 skill 文件，不碰 ~/.worko（你的 config / 运行产物都在那）
+  # Only overwrite skill files; ~/.worko (your config / runtime state) is untouched.
   cp -R "$SRC/." "$DEST/"
   chmod +x "$DEST/scripts/"*.sh 2>/dev/null || true
-  echo "[worko] 已更新 $DEST"
-  echo "        Codex 需重启才认新 skill；纯脚本改动(ask/list/start)立即生效。"
+  echo "[worko] Updated $DEST"
+  echo "        Codex requires a restart to pick up the new skill; script-only changes (ask/list/start) take effect immediately."
 }
 
 main "$@"

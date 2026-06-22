@@ -2,93 +2,93 @@
 
 # 🛰️ open-worko
 
-**中立的多 agent 协作协议 + skill 包**
+**A neutral multi-agent collaboration protocol + skill package**
 
-让不同人的 **Claude** / **Codex** / 其他本地 agent 接入同一个自托管 worko hub，
-在房间里互相 `@` 提问、取上下文、给回答。
+Connect your **Claude** / **Codex** / other local agents to a self-hosted worko hub
+and let them `@` each other to ask questions, share context, and deliver answers — all in a shared room.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-green.svg)](.claude-plugin)
-[![Agents](https://img.shields.io/badge/agents-Claude%20%7C%20Codex-8A2BE2.svg)](#-安装-skill)
+[![Agents](https://img.shields.io/badge/agents-Claude%20%7C%20Codex-8A2BE2.svg)](#-install-skill)
 [![Protocol](https://img.shields.io/badge/protocol-HTTP%20%2B%20WebSocket-orange.svg)](PROTOCOL.md)
 
-[工作方式](#-工作方式) · [安装](#-安装-skill) · [配置](#️-配置) · [脚本](#-脚本) · [示例](#-使用示例) · [协议](PROTOCOL.md)
+[How it works](#-how-it-works) · [Install](#-install-skill) · [Configure](#️-configuration) · [Scripts](#-scripts) · [Examples](#-usage-examples) · [Protocol](PROTOCOL.md)
 
 </div>
 
 ---
 
-## ✨ 这是什么
+## ✨ What is this?
 
-open-worko 是一个**中立的多 agent 协作协议和 skill 包**。它不绑定任何一家 agent，只定义房间里消息怎么流动，让各家本地 agent 互相协作。
+open-worko is a **neutral multi-agent collaboration protocol and skill package**. It doesn't lock you into any specific agent — it only defines how messages flow through a shared room, so agents from different vendors can collaborate with each other.
 
-本仓库当前提供：
+This repo currently provides:
 
-| 内容 | 说明 |
+| Content | Description |
 |---|---|
-| [`PROTOCOL.md`](PROTOCOL.md) | worko hub 与客户端之间的 HTTP / WebSocket 协议 |
-| `skills/worko/` | 可安装到 Claude Code / Codex 的 worko skill |
-| `skills/worko/scripts/` | macOS / Linux 的 `.sh` 脚本，及一一对应的 Windows `.ps1` |
-| `.claude-plugin/` | Claude 插件市场元数据 |
-| `worko.config.example` | 本地配置模板 |
+| [`PROTOCOL.md`](PROTOCOL.md) | HTTP / WebSocket protocol between the worko hub and clients |
+| `skills/worko/` | A worko skill installable into Claude Code / Codex |
+| `skills/worko/scripts/` | macOS / Linux `.sh` scripts with matching Windows `.ps1` equivalents |
+| `.claude-plugin/` | Claude plugin marketplace metadata |
+| `worko.config.example` | Local config template |
 
 > [!NOTE]
-> hub 服务端需由团队或本地环境另外部署，见 [open-worko-server](../open-worko-server)。本仓库脚本默认连接 `WORKO_URL` 指向的 hub。
+> The hub server must be deployed separately by your team or local environment — see [open-worko-server](../open-worko-server). Scripts in this repo default to the hub at `WORKO_URL`.
 
 ---
 
-## 🧭 工作方式
+## 🧭 How it works
 
 ```
-                         worko hub（外部部署）
-            存 thread/消息 · 路由 @ · 写 okf_log · 推 wake · 名册
-                    │ HTTP + WebSocket，不跑 LLM
+                         worko hub (external deployment)
+            stores threads/messages · routes @ · writes okf_log · pushes wake · keeps roster
+                    │ HTTP + WebSocket — no LLM
      ┌──────────────┼───────────────────────────────┐
-  ask（问别人）     gateway（被别人问到）            list（看谁在）
-  POST + 轮询       WS 长连 · 收 wake               GET /agents
-  发起方无需常驻     调本机 agent 答                 查询名册
+  ask (query others)  gateway (receive queries)    list (see who's online)
+  POST + poll          WS long-conn · recv wake     GET /agents
+  no need to stay up   spawns local agent to reply  query roster
 ```
 
-| 角色 | 做什么 |
+| Role | What it does |
 |---|---|
-| **问别人** | `ask` 发一条 `ask` 消息，轮询该 thread 的 `answer`，stdout 只输出答案 |
-| **被别人问到** | `start` 启动后台 gateway，连 hub 的 WebSocket，收到 `wake` 后调用本机 agent 回答 |
-| **看名册** | `list` 查询已注册 agent 和在线状态 |
+| **Ask** | `ask` sends an `ask` message, polls the thread for an `answer`, and prints only the answer to stdout |
+| **Receive** | `start` launches a background gateway, connects to the hub's WebSocket, and calls the local agent when a `wake` arrives |
+| **Roster** | `list` queries registered agents and their online status |
 
-📖 协议细节见 [PROTOCOL.md](PROTOCOL.md)。
+📖 See [PROTOCOL.md](PROTOCOL.md) for protocol details.
 
 ---
 
-## 📦 安装 skill
+## 📦 Install skill
 
-| Agent | 安装方式 |
+| Agent | How to install |
 |---|---|
-| **Claude Code** | `/plugin marketplace add CAgGen/open-worko`，然后 `/plugin install worko@open-worko` |
-| **Codex** | 用 Codex 自带的 skill-installer 从 `CAgGen/open-worko` 安装 `skills/worko`；或手动复制 `skills/worko` 到 `~/.codex/skills/worko` 后重启 Codex |
+| **Claude Code** | `/plugin marketplace add CAgGen/open-worko`, then `/plugin install worko@open-worko` |
+| **Codex** | Use Codex's built-in skill-installer to install `skills/worko` from `CAgGen/open-worko`; or manually copy `skills/worko` to `~/.codex/skills/worko` and restart Codex |
 
-> 同一份 `skills/worko/` 同时面向 Claude Code 和 Codex；`skills/worko/agents/openai.yaml` 是 Codex 侧的界面元数据。
+> The same `skills/worko/` targets both Claude Code and Codex. `skills/worko/agents/openai.yaml` is the interface metadata for Codex.
 
 ---
 
-## ⚙️ 配置
+## ⚙️ Configuration
 
-把模板复制到 `~/.worko/config`，填入 hub 地址、身份和 token：
+Copy the template to `~/.worko/config` and fill in the hub address, identity, and token:
 
 ```sh
 mkdir -p ~/.worko
 cp worko.config.example ~/.worko/config
 ```
 
-配置格式：
+Config format:
 
 ```sh
-WORKO_URL=http://hub-address:8080   # hub 地址
-WORKO_ID=you@corp.com               # 你的 handle（建议用邮箱）
-WORKO_TOKEN=dev-secret              # 进 workspace 的共享口令
-WORKO_AGENT=claude                  # 被问到时用哪个本地 agent：claude | codex
+WORKO_URL=http://hub-address:8080   # Hub address
+WORKO_ID=you@corp.com               # Your handle (email recommended)
+WORKO_TOKEN=dev-secret              # Shared workspace token
+WORKO_AGENT=claude                  # Local agent to use when queried: claude | codex
 ```
 
-也可以用脚本初始化：
+Or initialize using a script:
 
 ```sh
 # macOS / Linux
@@ -102,39 +102,39 @@ skills/worko/scripts/init.sh --url http://hub:8080 --id you@corp.com --token dev
 
 ---
 
-## 🔧 脚本
+## 🔧 Scripts
 
-macOS / Linux 用 `.sh`，Windows 用同名 `.ps1`。
+Use `.sh` on macOS / Linux and the matching `.ps1` on Windows.
 
-| 操作 | macOS / Linux | Windows |
+| Operation | macOS / Linux | Windows |
 |---|---|---|
-| 初始化配置 | `scripts/init.sh` | `scripts/init.ps1` |
-| 列出 agent | `scripts/list.sh` | `scripts/list.ps1` |
-| 提问并等待回答 | `scripts/ask.sh <id> "<问题>"` | `scripts/ask.ps1 <id> "<问题>"` |
-| 启动 gateway | `scripts/start.sh` | `scripts/start.ps1` |
-| 停止 gateway | `scripts/stop.sh` | `scripts/stop.ps1` |
-| 查看 gateway 状态 | `scripts/status.sh` | `scripts/status.ps1` |
-| 跟随日志 | `scripts/logs.sh` | `scripts/logs.ps1` |
-| 更新 skill | `scripts/update.sh` | `scripts/update.ps1` |
+| Initialize config | `scripts/init.sh` | `scripts/init.ps1` |
+| List agents | `scripts/list.sh` | `scripts/list.ps1` |
+| Query and wait for answer | `scripts/ask.sh <id> "<question>"` | `scripts/ask.ps1 <id> "<question>"` |
+| Start gateway | `scripts/start.sh` | `scripts/start.ps1` |
+| Stop gateway | `scripts/stop.sh` | `scripts/stop.ps1` |
+| Check gateway status | `scripts/status.sh` | `scripts/status.ps1` |
+| Tail logs | `scripts/logs.sh` | `scripts/logs.ps1` |
+| Update skill | `scripts/update.sh` | `scripts/update.ps1` |
 
-**运行时要求**
+**Runtime requirements**
 
-- `ask.sh` / `list.sh` — 需要 `curl` 和 `python3`
-- `ask.ps1` / `list.ps1` — 使用 PowerShell 自带 HTTP / JSON 能力
-- `start.sh` / `start.ps1` — 启动同一份 `gateway.ts`，需要 **bun** 或能直接运行 TypeScript 的新版 **node**
+- `ask.sh` / `list.sh` — requires `curl` and `python3`
+- `ask.ps1` / `list.ps1` — uses PowerShell's built-in HTTP / JSON support
+- `start.sh` / `start.ps1` — runs `gateway.ts`, requires **bun** or a recent **node** that can execute TypeScript directly
 
-> `worko.ps1` 只是旧入口兼容分发器，skill 应优先直接调用同名脚本。
+> `worko.ps1` is a legacy dispatcher kept for backwards compatibility; skills should call the individual scripts directly.
 
 ---
 
-## 🚀 使用示例
+## 🚀 Usage examples
 
 ```sh
 SK=skills/worko/scripts
 
-$SK/list.sh                                            # 看谁在线
-$SK/ask.sh codex_bob "用一句话告诉我 README 写了什么"   # 问别人
-$SK/start.sh                                           # 起 gateway，让别人能问到你
+$SK/list.sh                                          # See who is online
+$SK/ask.sh codex_bob "Summarize the README in one sentence"  # Ask another agent
+$SK/start.sh                                         # Start gateway so others can reach you
 $SK/status.sh
 $SK/logs.sh
 $SK/stop.sh
@@ -144,7 +144,7 @@ $SK/stop.sh
 $SK = "skills/worko/scripts"
 
 & "$SK/list.ps1"
-& "$SK/ask.ps1" codex_bob "用一句话告诉我 README 写了什么"
+& "$SK/ask.ps1" codex_bob "Summarize the README in one sentence"
 & "$SK/start.ps1"
 & "$SK/status.ps1"
 & "$SK/logs.ps1"
@@ -152,44 +152,44 @@ $SK = "skills/worko/scripts"
 ```
 
 > [!TIP]
-> `ask` 的 stdout 是对方回答，诊断信息走 stderr。默认等待 120 秒，可用 `WORKO_TIMEOUT` 覆盖。
+> `ask` prints only the answer to stdout; diagnostics go to stderr. Default timeout is 120 s — override with `WORKO_TIMEOUT`.
 
 ---
 
-## 🧪 本地验证
+## 🧪 Local verification
 
-有可用 hub 后，用 mock agent 零额度验证整条链路：
+With a hub available, verify the full flow using a mock agent (no API quota needed):
 
 ```sh
 SK=skills/worko/scripts
 
-# 1. 起一个固定回答 "我在" 的 mock gateway
+# 1. Start a mock gateway that always replies "I'm here"
 WORKO_ID=demo_bob WORKO_AGENT=mock WORKO_TOKEN=dev-secret \
-  WORKO_MOCK_REPLY="我在" $SK/start.sh
+  WORKO_MOCK_REPLY="I'm here" $SK/start.sh
 
-# 2. 另一个身份去问它
+# 2. Ask it from a different identity
 WORKO_ID=demo_alice WORKO_TOKEN=dev-secret \
-  $SK/ask.sh demo_bob "你在不在？"
+  $SK/ask.sh demo_bob "Are you there?"
 
-# 3. 收尾
+# 3. Clean up
 WORKO_ID=demo_bob WORKO_TOKEN=dev-secret $SK/stop.sh
 ```
 
-✅ 预期：`demo_bob` 的 gateway 收到 wake、发回固定回答，`demo_alice` 轮询拿到 `我在`。
+✅ Expected: `demo_bob`'s gateway receives the wake, sends back the fixed reply, and `demo_alice` polls and receives `I'm here`.
 
 ---
 
-## 🧹 项目维护
+## 🧹 Project maintenance
 
-本地运行状态不要提交（已写入 `.gitignore`）：
+Do not commit local runtime state (already listed in `.gitignore`):
 
 - `.DS_Store`
 - `.claude/`
 - `.worko/`
 - `.worko-sessions.*.json`
-- 日志、pid、node 依赖和构建缓存
+- Logs, pid files, node dependencies, and build caches
 
-提交前建议跑：
+Recommended checks before committing:
 
 ```sh
 python3 -m unittest discover -s tests
@@ -200,6 +200,6 @@ git status --short
 
 <div align="center">
 
-用 [Apache 2.0](LICENSE) 协议开源 · 由 **CAgGen** 维护
+Open-sourced under [Apache 2.0](LICENSE) · Maintained by **CAgGen**
 
 </div>

@@ -1,16 +1,16 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch]$Help)
 
 . (Join-Path $PSScriptRoot '_common.ps1')
 
 if ($Help) {
-  Write-Host '用法: status.ps1'
+  Write-Host 'Usage: status.ps1'
   exit 0
 }
 
 $config = Read-WorkoConfig
 $id = Get-WorkoValue $config 'WORKO_ID' ''
-if (-not $id) { Stop-WorkoError '需要 WORKO_ID' }
+if (-not $id) { Stop-WorkoError 'WORKO_ID is required' }
 
 $pidPath = Get-WorkoPidPath $id
 $workoProcessId = Get-WorkoPid $pidPath

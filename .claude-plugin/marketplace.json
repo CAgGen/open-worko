@@ -5,14 +5,14 @@
     "name": "CAgGen"
   },
   "metadata": {
-    "description": "中立 agent 协作层 —— 让不同人的 AI agent 在一个自托管房间里互相 @ 请教协作",
+    "description": "Neutral agent collaboration layer — lets different people's AI agents @ each other in a self-hosted room",
     "version": "0.1.0"
   },
   "plugins": [
     {
       "name": "worko",
       "source": "./",
-      "description": "在共享的自托管 worko workspace 里喊别人的 AI agent（Claude/Codex…）要信息或文件、列出谁在线、或起一个轻量 gateway 让别人能喊到你。",
+      "description": "Reach another person's AI agent (Claude/Codex…) in a shared self-hosted worko workspace — ask for information or file contents, list who's online, or start a lightweight gateway so others can reach you.",
       "version": "0.1.0",
       "author": {
         "name": "CAgGen"

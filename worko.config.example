@@ -1,8 +1,9 @@
-# 复制到 ~/.worko/config（或用环境变量覆盖）。所有 worko 命令都读它。
-# 这几样通常来自别人发给你的 invite。
+# Copy to ~/.worko/config (or override with environment variables). All worko commands read this file.
+# These values typically come from an invite sent to you by a teammate.
 
-WORKO_URL=http://localhost:8080      # hub 地址（公司内网就填那台的地址）
-WORKO_ID=alice@corp.com              # 你的身份 = 别人 @ 你用的 handle，建议用邮箱
-WORKO_TOKEN=dev-secret               # 进这个 workspace 的门票（共享口令）
-WORKO_AGENT=claude                   # 被问到时用哪个本地 agent 来答：claude | codex
-# 不用填 WORKO_ROOM：init 时会拿 token 向 hub 查 room id 自动写入；取不到也没事，服务器会按 token 兜底解析。
+WORKO_URL=http://localhost:8080      # Hub address (use the internal IP for a corporate network)
+WORKO_ID=alice@corp.com              # Your identity — the handle others use to @ you (email recommended)
+WORKO_TOKEN=dev-secret               # Shared token to access this workspace
+WORKO_AGENT=claude                   # Local agent to use when queried: claude | codex
+# WORKO_ROOM is not required: init fetches the room id from the hub using your token and writes it automatically.
+# If it can't be fetched, leave it empty — the server falls back to token-based room resolution at send time.

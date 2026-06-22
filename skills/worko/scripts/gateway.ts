@@ -1,29 +1,31 @@
-// worko gateway —— 响应方常驻 daemon。
-// 长连 hub WS，等别人来问(ask)，调本地 agent 答；只管 inbound ask，
-// answer/note 不碰（那是发起方 ask.sh 自己轮询收）。空闲时挂在 socket 上睡，几乎不耗。
+// worko gateway — responder-side persistent daemon.
+// Keeps a long WebSocket connection to the hub, waits for inbound asks, calls the local agent,
+// and posts the answer back. Only handles inbound asks; answer/note messages are ignored
+// (the asker's ask.sh polls for those itself). Idles on the socket; nearly zero CPU when quiet.
 import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { platform } from "node:os";
 
-// 弹个桌面通知给机主：daemon 静默应答的话，机主根本不知道自己的 agent 被人拉起来跑过。
-// 尽力而为：弹不出来（无桌面/无工具）就算了，console.log 仍在。WORKO_NOTIFY=0 可关。
+// Notify the machine owner that the daemon answered silently on their behalf —
+// otherwise they'd have no idea their agent was invoked. Best-effort: if no desktop
+// or notification tool is available, console.log still runs. Set WORKO_NOTIFY=0 to disable.
 function notifyUser(title, body) {
   if (process.env.WORKO_NOTIFY === "0") return;
   const t = title.replace(/"/g, "'"), b = body.replace(/"/g, "'");
   try {
     if (platform() === "darwin") spawn("osascript", ["-e", `display notification "${b}" with title "${t}"`], { stdio: "ignore" }).unref();
     else if (platform() === "linux") spawn("notify-send", [t, b], { stdio: "ignore" }).unref();
-    // ponytail: Windows 原生 toast 要装 BurntToast 模块，不值当；靠下面的 console.log 兜底，真有人要再加。
-  } catch { /* 通知失败不该影响应答 */ }
+    // ponytail: Windows native toast requires the BurntToast module — not worth the dep; console.log covers it. Add when someone asks.
+  } catch { /* notification failure must not affect the answer */ }
 }
 
 const HTTP = process.env.WORKO_URL ?? "http://localhost:8080";
 const WS_URL = process.env.WORKO_WS ?? HTTP.replace(/^http/, "ws");
 const ID = process.env.WORKO_ID ?? "anon";
 const TOKEN = process.env.WORKO_TOKEN ?? "";
-const ROOM = process.env.WORKO_ROOM ?? "";   // 留空 → 服务器按 token 自动定位 workspace 的 room（乱填 room_dev 会 403）
-const AGENT = process.env.WORKO_AGENT ?? "claude";   // 被问到时用哪个本地 agent：claude | codex | mock
+const ROOM = process.env.WORKO_ROOM ?? "";   // empty → server auto-resolves the workspace room via token (hardcoding room_dev causes 403)
+const AGENT = process.env.WORKO_AGENT ?? "claude";   // local agent to use when queried: claude | codex | mock
 const SESSION_FILE = process.env.WORKO_SESSIONS ?? `${process.env.HOME}/.worko/sessions.${ID}.json`;
 const authHeaders = TOKEN ? { authorization: `Bearer ${TOKEN}` } : {};
 
@@ -36,10 +38,11 @@ async function postMessage(msg) {
   });
   return res.json();
 }
-// WORKO_AGENT_CWD：本地 agent 在哪个目录里跑（codex 要在"已信任"的目录才肯非交互执行）。
+// WORKO_AGENT_CWD: directory the local agent runs in (codex requires a "trusted" directory for non-interactive execution).
 const AGENT_CWD = process.env.WORKO_AGENT_CWD || undefined;
-// WORKO_SANDBOX：codex 沙箱档位。默认 workspace-write = 盒子内可读/可跑命令/可写，
-// 配 approval_policy=never → headless 永不弹批准、越界直接失败而不是吊死等人。谨慎者设 read-only。
+// WORKO_SANDBOX: codex sandbox level. Default workspace-write = box can read/run commands/write inside;
+// paired with approval_policy=never → headless mode never prompts for approval; out-of-scope operations fail immediately
+// instead of hanging. Conservative users can set read-only.
 const SANDBOX = process.env.WORKO_SANDBOX || "workspace-write";
 function run(cmd, args) {
   return new Promise((resolve) => {
@@ -52,71 +55,72 @@ function run(cmd, args) {
   });
 }
 
-// agent 没产出时，把退出码 + stderr 摘要带回去，便于排查（别只回干巴巴的占位符）。
+// When the agent produces no output, include exit code + stderr summary for easier debugging.
 const noOutput = (name, code, stderr) => {
   const e = stderr.trim().replace(/\s+/g, " ").slice(0, 300);
-  return `[${name} 无输出 exit=${code}${e ? " | stderr: " + e : ""}]`;
+  return `[${name} no output exit=${code}${e ? " | stderr: " + e : ""}]`;
 };
 
-// agent 适配层：每家 CLI 怎么调、回答从哪读，都收在这。
+// Agent adapters: how to invoke each CLI and where to read the answer from.
 const adapters = {
   async mock() { return process.env.WORKO_MOCK_REPLY ?? `[mock ${ID}]`; },
   async claude(prompt, thread) {
     const s = await loadSessions(); const a = ["-p", "--output-format", "json"];
     if (s[thread]) a.push("--resume", s[thread]); a.push(prompt);
     const { stdout, stderr, code } = await run("claude", a);
-    if (code === 127) return "[claude 未安装或不在 PATH]";
+    if (code === 127) return "[claude not installed or not on PATH]";
     try { const j = JSON.parse(stdout); if (j.session_id) { s[thread] = j.session_id; await saveSessions(s); } return (j.result ?? stdout).trim(); }
     catch { return stdout.trim() || noOutput("claude", code, stderr); }
   },
   async codex(prompt) {
-    // --skip-git-repo-check：允许在非 git/非信任目录跑（codex 默认要求 git 仓库，否则拒绝执行）。
-    // -s $SANDBOX + approval_policy=never：headless 命门——只要还会弹批准，无人应答就吊死。
-    //   workspace-write 让盒子内的读/跑命令/写直接放行（如解 .docx），越界操作直接失败而非卡住。
-    // -C $AGENT_CWD：把工作根 + 沙箱边界绑到这个目录。
-    // 仍不暴露 danger-full-access：gateway 应答 workspace 里任何人，不给突破沙箱的口子。
+    // --skip-git-repo-check: allow running in non-git / non-trusted directories (codex refuses by default).
+    // -s $SANDBOX + approval_policy=never: headless requirement — any pending approval dialog hangs forever with no one to click it.
+    //   workspace-write lets the box read/run commands/write inside (e.g. unzip a .docx), failing immediately on out-of-scope ops.
+    // -C $AGENT_CWD: bind working root + sandbox boundary to this directory.
+    // danger-full-access is intentionally not exposed: the gateway answers anyone in the workspace;
+    // there must be no remote path to break out of the sandbox.
     const a = ["exec", "--skip-git-repo-check", "-s", SANDBOX, "-c", "approval_policy=never"];
     if (AGENT_CWD) a.push("-C", AGENT_CWD);
     a.push(prompt);
     const { stdout, stderr, code } = await run("codex", a);
-    if (code === 127) return "[codex 未安装或不在 PATH]";
+    if (code === 127) return "[codex not installed or not on PATH]";
     return stdout.trim() || noOutput("codex", code, stderr);
   },
 };
 const runAgent = (prompt, thread) => (adapters[AGENT] ?? adapters.claude)(prompt, thread);
 
 function buildPrompt(ctx) {
-  const L = [`你在一个多 agent 协作房间里，身份是 ${ID}。有人在问你下面的问题，请直接、简洁地回答。`];
-  if (ctx.head) L.push(`\n[话题摘要]\n${ctx.head}`);
-  L.push("\n[最近消息]");
+  const L = [`You are in a multi-agent collaboration room, identified as ${ID}. Someone is asking you the following question — answer directly and concisely.`];
+  if (ctx.head) L.push(`\n[Thread summary]\n${ctx.head}`);
+  L.push("\n[Recent messages]");
   for (const m of ctx.recent ?? []) L.push(`${m.from} (${m.type}): ${m.content}`);
   return L.join("\n");
 }
 
-// 处理一条"别人问我"的 thread：调本地 agent，把答案发回提问方。
+// Handle one inbound ask: call the local agent and post the answer back to the asker.
 async function handleAsk(thread) {
   const ctx = await (await fetch(`${HTTP}/context?thread=${thread}`, { headers: authHeaders })).json();
-  if (ctx.status !== "waiting") return;            // 已答过/已结束 → 跳过（补同步时去重）
+  if (ctx.status !== "waiting") return;            // already answered / already closed → skip (dedup during catch-up)
   if (!ctx.asker || ctx.asker === ID) return;
   const q = (ctx.recent?.at(-1)?.content ?? "").replace(/\s+/g, " ").slice(0, 120);
-  console.log(`[${ID}] ↑ ${ctx.asker} 问你，正在拉起 ${AGENT}: ${q}`);
-  notifyUser(`worko: ${ctx.asker} 在问你`, q || "（启动本地 agent 应答）");
+  console.log(`[${ID}] ↑ ${ctx.asker} is asking you, spawning ${AGENT}: ${q}`);
+  notifyUser(`worko: ${ctx.asker} is asking you`, q || "(spawning local agent to reply)");
   const answer = await runAgent(buildPrompt(ctx), thread);
   if (!answer) return;
   await postMessage({ ...(ROOM ? { room: ROOM } : {}), thread, from: ID, to: [ctx.asker], type: "answer", content: answer });
   console.log(`[${ID}] → answer ${ctx.asker}: ${answer.slice(0, 80)}`);
 }
 
-// 重连补同步：上线先把"还 waiting_for 我"的 thread 补答一遍（防断线那几秒丢 wake）。
+// Catch-up on reconnect: replay any threads still waiting_for me (prevents missed wakes during downtime).
 async function catchUp() {
   try {
     const inbox = await (await fetch(`${HTTP}/inbox?id=${encodeURIComponent(ID)}`, { headers: authHeaders })).json();
-    for (const t of inbox.threads ?? []) { console.log(`[${ID}] 补同步 ${t}`); await handleAsk(t).catch(console.error); }
-  } catch (e) { console.error("catchUp 失败:", e.message); }
+    for (const t of inbox.threads ?? []) { console.log(`[${ID}] catch-up ${t}`); await handleAsk(t).catch(console.error); }
+  } catch (e) { console.error("catchUp failed:", e.message); }
 }
 
-// 重连退避：连不上/被拒时别 2s 死循环（会把自己 IP 刷进限流/封禁）。
-// 成功连上就重置回 2s。
+// Reconnect backoff: don't tight-loop when the hub is unreachable (avoids IP rate-limit / bans).
+// Resets to 2 s on a successful connection.
 let retryMs = 2000;
 const RETRY_MAX = 60_000;
 
@@ -125,19 +129,19 @@ function listen() {
   ws.onopen = () => { retryMs = 2000; console.log(`[${ID}] connected ${WS_URL} (agent=${AGENT})`); catchUp(); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
-    // 只对 inbound ask 动作；answer/note 一律忽略（那是我问出去的回信，发起方自己收）。
+    // Only act on inbound asks; answer/note are replies to our own outbound asks — the asker collects those.
     if (m.type === "event" && m.event === "wake" && m.payload?.type === "ask") {
       console.log(`[${ID}] wake ask on ${m.payload.thread} (from ${m.payload.from})`);
       handleAsk(m.payload.thread).catch(console.error);
     }
   };
   ws.onclose = () => {
-    console.log(`[${ID}] disconnected, retry ${retryMs / 1000}s（连不上多半是 token 没配好/还没被加进 workspace 白名单）`);
+    console.log(`[${ID}] disconnected, retrying in ${retryMs / 1000}s (most likely cause: token not configured / not yet added to workspace allowlist)`);
     setTimeout(listen, retryMs);
-    retryMs = Math.min(retryMs * 2, RETRY_MAX);  // 指数退避，封顶 60s
+    retryMs = Math.min(retryMs * 2, RETRY_MAX);  // exponential backoff, cap at 60 s
   };
   ws.onerror = () => ws.close();
 }
 
-if (!ID || ID === "anon") { console.error("需要 WORKO_ID"); process.exit(1); }
+if (!ID || ID === "anon") { console.error("WORKO_ID is required"); process.exit(1); }
 listen();

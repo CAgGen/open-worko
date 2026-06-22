@@ -1,10 +1,10 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param([switch]$Help)
 
 . (Join-Path $PSScriptRoot '_common.ps1')
 
 if ($Help) {
-  Write-Host '用法: list.ps1'
+  Write-Host 'Usage: list.ps1'
   exit 0
 }
 
@@ -15,7 +15,7 @@ $headers = Get-WorkoAuthHeaders (Get-WorkoValue $config 'WORKO_TOKEN' '')
 $response = Invoke-RestMethod -Uri "$hub/agents" -Headers $headers
 $agents = @($response.agents)
 if (-not $agents -or $agents.Count -eq 0) {
-  Write-Host '(还没有人注册)'
+  Write-Host '(no agents registered yet)'
   exit 0
 }
 
